@@ -2,18 +2,22 @@
   "version": 2,
   "builds": [
     {
-      "src": "api/*.py",
+      "src": "api/**/*.py",
       "use": "@vercel/python"
-    },
-    {
-      "src": "public/**",
-      "use": "@vercel/static"
     }
   ],
   "routes": [
     {
-      "src": "/api/(.*)",
-      "dest": "/api/$1"
+      "src": "/api/data",
+      "dest": "api/data.py"
+    },
+    {
+      "src": "/api/metrics",
+      "dest": "api/metrics.py"
+    },
+    {
+      "src": "/api/summary",
+      "dest": "api/summary.py"
     },
     {
       "src": "/(.*)",

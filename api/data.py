@@ -1,133 +1,11 @@
+from flask import Flask, jsonify, request
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 import warnings
 warnings.filterwarnings('ignore')
 
-class InvestmentPerformanceAnalyzer:
-    def __init__(self, data, risk_free_rate=0.015):
-        """
-        初始化分析器 - Vercel 版本（使用内存数据）
-
-        参数:
-        data: DataFrame 包含投资数据
-        risk_free_rate: 无风险年化收益率 (默认1.5%)
-        """
-        self.risk_free_rate = risk_free_rate
-        self.data = data
-        self.results = {}
-        self.days_trade = 251  # 年交易日数
-
-    def calculate_performance_metrics(self):
-        """计算业绩指标"""
-        if self.data is None or len(self.data) == 0:
-            return
-
-        # 计算归一化净值 (起始值为1)
-        initial_nav = self.data['单元资产净值(净价)'].iloc[0]
-        self.data['归一化净值'] = self.data['单元资产净值(净价)'] / initial_nav
-
-        # 计算每日收益率
-        self.data['日收益率'] = self.data['归一化净值'].pct_change()
-
-        # 计算累计收益率
-        self.data['累计收益率'] = self.data['归一化净值'] - 1
-
-        # 计算滚动最大净值 (用于计算回撤)
-        self.data['滚动最大净值'] = self.data['归一化净值'].expanding().max()
-
-        # 计算最大回撤率
-        self.data['回撤'] = (self.data['归一化净值'] - self.data['滚动最大净值']) / self.data['滚动最大净值']
-
-        # 计算关键投资评估指标
-        self.calculate_key_metrics()
-
-        # 计算不同时间段的指标
-        self.calculate_period_metrics()
-
-    def calculate_key_metrics(self):
-        """计算关键业绩指标"""
-        total_days = len(self.data)
-        trading_days_per_year = self.days_trade
-
-        # 总收益率
-        total_return = self.data['归一化净值'].iloc[-1] - 1
-
-        # 年化收益率
-        years = total_days / trading_days_per_year
-        annual_return = (1 + total_return) ** (1 / years) - 1 if years > 0 else 0
-
-        # 年化波动率
-        daily_volatility = self.data['日收益率'].std()
-        annual_volatility = daily_volatility * np.sqrt(trading_days_per_year)
-
-        # 夏普比率
-        sharpe_ratio = (annual_return - self.risk_free_rate) / annual_volatility if annual_volatility > 0 else 0
-
-        # 最大回撤
-        max_drawdown = self.data['回撤'].min()
-
-        # 卡玛比率
-        calmar_ratio = annual_return / abs(max_drawdown) if max_drawdown != 0 else 0
-
-        # 保存结果
-        self.results['总体指标'] = {
-            '总收益率': total_return,
-            '年化收益率': annual_return,
-            '年化波动率': annual_volatility,
-            '夏普比率': sharpe_ratio,
-            '最大回撤': max_drawdown,
-            '卡玛比率': calmar_ratio,
-            '数据天数': total_days
-        }
-
-    def calculate_period_metrics(self):
-        """计算不同时间段的业绩指标"""
-        if len(self.data) == 0:
-            return
-
-        end_date = self.data['统计日期'].max()
-        trading_days_per_year = self.days_trade
-
-        # 定义时间段
-        periods = {
-            '近三个月': timedelta(days=90),
-            '近半年': timedelta(days=180),
-            '近一年': timedelta(days=365),
-            '近三年': timedelta(days=1095),
-            '成立以来': timedelta(days=365*10)
-        }
-
-        for period_name, delta in periods.items():
-            start_date = end_date - delta
-            period_data = self.data[self.data['统计日期'] >= start_date]
-
-            if len(period_data) < 2:
-                continue
-
-            # 计算该时间段的指标
-            period_return = period_data['归一化净值'].iloc[-1] / period_data['归一化净值'].iloc[0] - 1
-            period_days = len(period_data)
-            period_years = period_days / trading_days_per_year
-            annual_return = (1 + period_return) ** (1 / period_years) - 1 if period_years > 0 else 0
-            daily_volatility = period_data['日收益率'].std()
-            annual_volatility = daily_volatility * np.sqrt(trading_days_per_year)
-            sharpe_ratio = (annual_return - self.risk_free_rate) / annual_volatility if annual_volatility > 0 else 0
-            max_drawdown = period_data['回撤'].min()
-            calmar_ratio = annual_return / abs(max_drawdown) if max_drawdown != 0 else 0
-
-            self.results[period_name] = {
-                '总收益率': period_return,
-                '年化收益率': annual_return,
-                '年化波动率': annual_volatility,
-                '夏普比率': sharpe_ratio,
-                '最大回撤': max_drawdown,
-                '卡玛比率': calmar_ratio,
-                '数据天数': period_days,
-                '开始日期': period_data['统计日期'].min()
-            }
-
-# 生成示例数据函数
+# 生成示例数据
 def generate_sample_data():
     """生成示例数据用于演示"""
     np.random.seed(42)
@@ -149,3 +27,111 @@ def generate_sample_data():
     })
 
     return df
+
+class InvestmentPerformanceAnalyzer:
+    def __init__(self, data, risk_free_rate=0.015):
+        self.risk_free_rate = risk_free_rate
+        self.data = data
+        self.results = {}
+        self.days_trade = 251
+
+    def calculate_performance_metrics(self):
+        if self.data is None or len(self.data) == 0:
+            return
+
+        initial_nav = self.data['单元资产净值(净价)'].iloc[0]
+        self.data['归一化净值'] = self.data['单元资产净值(净价)'] / initial_nav
+        self.data['日收益率'] = self.data['归一化净值'].pct_change()
+        self.data['累计收益率'] = self.data['归一化净值'] - 1
+        self.data['滚动最大净值'] = self.data['归一化净值'].expanding().max()
+        self.data['回撤'] = (self.data['归一化净值'] - self.data['滚动最大净值']) / self.data['滚动最大净值']
+
+        self.calculate_key_metrics()
+        self.calculate_period_metrics()
+
+    def calculate_key_metrics(self):
+        total_days = len(self.data)
+        trading_days_per_year = self.days_trade
+
+        total_return = self.data['归一化净值'].iloc[-1] - 1
+        years = total_days / trading_days_per_year
+        annual_return = (1 + total_return) ** (1 / years) - 1 if years > 0 else 0
+        daily_volatility = self.data['日收益率'].std()
+        annual_volatility = daily_volatility * np.sqrt(trading_days_per_year)
+        sharpe_ratio = (annual_return - self.risk_free_rate) / annual_volatility if annual_volatility > 0 else 0
+        max_drawdown = self.data['回撤'].min()
+        calmar_ratio = annual_return / abs(max_drawdown) if max_drawdown != 0 else 0
+
+        self.results['总体指标'] = {
+            '总收益率': total_return,
+            '年化收益率': annual_return,
+            '年化波动率': annual_volatility,
+            '夏普比率': sharpe_ratio,
+            '最大回撤': max_drawdown,
+            '卡玛比率': calmar_ratio,
+            '数据天数': total_days
+        }
+
+    def calculate_period_metrics(self):
+        if len(self.data) == 0:
+            return
+
+        end_date = self.data['统计日期'].max()
+        trading_days_per_year = self.days_trade
+
+        periods = {
+            '近三个月': timedelta(days=90),
+            '近半年': timedelta(days=180),
+            '近一年': timedelta(days=365),
+            '近三年': timedelta(days=1095),
+            '成立以来': timedelta(days=365*10)
+        }
+
+        for period_name, delta in periods.items():
+            start_date = end_date - delta
+            period_data = self.data[self.data['统计日期'] >= start_date]
+
+            if len(period_data) < 2:
+                continue
+
+            period_return = period_data['归一化净值'].iloc[-1] / period_data['归一化净值'].iloc[0] - 1
+            period_days = len(period_data)
+            period_years = period_days / trading_days_per_year
+            annual_return = (1 + period_return) ** (1 / period_years) - 1 if period_years > 0 else 0
+            daily_volatility = period_data['日收益率'].std()
+            annual_volatility = daily_volatility * np.sqrt(trading_days_per_year)
+            sharpe_ratio = (annual_return - self.risk_free_rate) / annual_volatility if annual_volatility > 0 else 0
+            max_drawdown = period_data['回撤'].min()
+            calmar_ratio = annual_return / abs(max_drawdown) if max_drawdown != 0 else 0
+
+            self.results[period_name] = {
+                '总收益率': period_return,
+                '年化收益率': annual_return,
+                '年化波动率': annual_volatility,
+                '夏普比率': sharpe_ratio,
+                '最大回撤': max_drawdown,
+                '卡玛比率': calmar_ratio,
+                '数据天数': period_days,
+                '开始日期': period_data['统计日期'].min()
+            }
+
+# 初始化全局分析器
+sample_data = generate_sample_data()
+analyzer = InvestmentPerformanceAnalyzer(sample_data, risk_free_rate=0.015)
+analyzer.calculate_performance_metrics()
+
+app = Flask(__name__)
+
+@app.route('/api/data', methods=['GET'])
+def handler(request=None):
+    """获取净值数据"""
+    if analyzer.data is None:
+        return jsonify({'error': '数据未加载'}), 500
+
+    data = {
+        'dates': analyzer.data['统计日期'].dt.strftime('%Y-%m-%d').tolist(),
+        'nav': analyzer.data['归一化净值'].tolist(),
+        'drawdown': (analyzer.data['回撤'] * 100).tolist(),
+        'cumulative_return': (analyzer.data['累计收益率'] * 100).tolist()
+    }
+    return jsonify(data)
