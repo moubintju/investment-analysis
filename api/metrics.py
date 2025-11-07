@@ -1,8 +1,22 @@
+import json
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
-from http.server import BaseHTTPRequestHandler
-import json
+
+def generate_sample_data():
+    np.random.seed(42)
+    start_date = datetime(2024, 1, 1)
+    days = 250
+    dates = [start_date + timedelta(days=i) for i in range(days)]
+    initial_nav = 1.0
+    daily_returns = np.random.normal(0.0005, 0.01, days)
+    nav_values = [initial_nav]
+    for ret in daily_returns[1:]:
+        nav_values.append(nav_values[-1] * (1 + ret))
+    return pd.DataFrame({
+        '统计日期': dates,
+        '单元资产净值(净价)': nav_values
+    })
 
 class InvestmentPerformanceAnalyzer:
     def __init__(self, data, risk_free_rate=0.015):
@@ -81,52 +95,45 @@ class InvestmentPerformanceAnalyzer:
                 '开始日期': period_data['统计日期'].min()
             }
 
-def generate_sample_data():
-    np.random.seed(42)
-    start_date = datetime(2024, 1, 1)
-    days = 250
-    dates = [start_date + timedelta(days=i) for i in range(days)]
-    initial_nav = 1.0
-    daily_returns = np.random.normal(0.0005, 0.01, days)
-    nav_values = [initial_nav]
-    for ret in daily_returns[1:]:
-        nav_values.append(nav_values[-1] * (1 + ret))
-    return pd.DataFrame({
-        '统计日期': dates,
-        '单元资产净值(净价)': nav_values
-    })
-
 sample_data = generate_sample_data()
 analyzer = InvestmentPerformanceAnalyzer(sample_data, risk_free_rate=0.015)
 analyzer.calculate_performance_metrics()
 
-class handler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.send_header('Content-type', 'application/json')
-        self.send_header('Access-Control-Allow-Origin', '*')
-        self.end_headers()
+def handler(event, context):
+    """Vercel serverless function handler"""
 
-        if not analyzer.results:
-            response = {'error': '指标未计算'}
-        else:
-            metrics_data = []
-            all_periods = ['近三个月', '近半年', '近一年', '近三年', '成立以来']
+    if not analyzer.results:
+        return {
+            'statusCode': 500,
+            'headers': {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*'
+            },
+            'body': json.dumps({'error': '指标未计算'})
+        }
 
-            for period in all_periods:
-                if period in analyzer.results:
-                    metrics = analyzer.results[period]
-                    metrics_data.append({
-                        'period': period,
-                        'total_return': f"{metrics['总收益率']:.2%}",
-                        'annual_return': f"{metrics['年化收益率']:.2%}",
-                        'annual_volatility': f"{metrics['年化波动率']:.2%}",
-                        'sharpe_ratio': f"{metrics['夏普比率']:.2f}",
-                        'max_drawdown': f"{metrics['最大回撤']:.2%}",
-                        'calmar_ratio': f"{metrics['卡玛比率']:.2f}",
-                        'days': metrics['数据天数']
-                    })
-            response = metrics_data
+    metrics_data = []
+    all_periods = ['近三个月', '近半年', '近一年', '近三年', '成立以来']
 
-        self.wfile.write(json.dumps(response).encode())
-        return
+    for period in all_periods:
+        if period in analyzer.results:
+            metrics = analyzer.results[period]
+            metrics_data.append({
+                'period': period,
+                'total_return': f"{metrics['总收益率']:.2%}",
+                'annual_return': f"{metrics['年化收益率']:.2%}",
+                'annual_volatility': f"{metrics['年化波动率']:.2%}",
+                'sharpe_ratio': f"{metrics['夏普比率']:.2f}",
+                'max_drawdown': f"{metrics['最大回撤']:.2%}",
+                'calmar_ratio': f"{metrics['卡玛比率']:.2f}",
+                'days': metrics['数据天数']
+            })
+
+    return {
+        'statusCode': 200,
+        'headers': {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*'
+        },
+        'body': json.dumps(metrics_data)
+    }

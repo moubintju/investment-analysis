@@ -1,8 +1,22 @@
+import json
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
-from http.server import BaseHTTPRequestHandler
-import json
+
+def generate_sample_data():
+    np.random.seed(42)
+    start_date = datetime(2024, 1, 1)
+    days = 250
+    dates = [start_date + timedelta(days=i) for i in range(days)]
+    initial_nav = 1.0
+    daily_returns = np.random.normal(0.0005, 0.01, days)
+    nav_values = [initial_nav]
+    for ret in daily_returns[1:]:
+        nav_values.append(nav_values[-1] * (1 + ret))
+    return pd.DataFrame({
+        '统计日期': dates,
+        '单元资产净值(净价)': nav_values
+    })
 
 class InvestmentPerformanceAnalyzer:
     def __init__(self, data, risk_free_rate=0.015):
@@ -81,42 +95,36 @@ class InvestmentPerformanceAnalyzer:
                 '开始日期': period_data['统计日期'].min()
             }
 
-def generate_sample_data():
-    np.random.seed(42)
-    start_date = datetime(2024, 1, 1)
-    days = 250
-    dates = [start_date + timedelta(days=i) for i in range(days)]
-    initial_nav = 1.0
-    daily_returns = np.random.normal(0.0005, 0.01, days)
-    nav_values = [initial_nav]
-    for ret in daily_returns[1:]:
-        nav_values.append(nav_values[-1] * (1 + ret))
-    return pd.DataFrame({
-        '统计日期': dates,
-        '单元资产净值(净价)': nav_values
-    })
-
-# 初始化全局分析器
+# Initialize analyzer
 sample_data = generate_sample_data()
 analyzer = InvestmentPerformanceAnalyzer(sample_data, risk_free_rate=0.015)
 analyzer.calculate_performance_metrics()
 
-class handler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.send_header('Content-type', 'application/json')
-        self.send_header('Access-Control-Allow-Origin', '*')
-        self.end_headers()
+def handler(event, context):
+    """Vercel serverless function handler"""
 
-        if analyzer.data is None:
-            response = {'error': '数据未加载'}
-        else:
-            response = {
-                'dates': analyzer.data['统计日期'].dt.strftime('%Y-%m-%d').tolist(),
-                'nav': analyzer.data['归一化净值'].tolist(),
-                'drawdown': (analyzer.data['回撤'] * 100).tolist(),
-                'cumulative_return': (analyzer.data['累计收益率'] * 100).tolist()
-            }
+    if analyzer.data is None:
+        return {
+            'statusCode': 500,
+            'headers': {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*'
+            },
+            'body': json.dumps({'error': '数据未加载'})
+        }
 
-        self.wfile.write(json.dumps(response).encode())
-        return
+    response_data = {
+        'dates': analyzer.data['统计日期'].dt.strftime('%Y-%m-%d').tolist(),
+        'nav': analyzer.data['归一化净值'].tolist(),
+        'drawdown': (analyzer.data['回撤'] * 100).tolist(),
+        'cumulative_return': (analyzer.data['累计收益率'] * 100).tolist()
+    }
+
+    return {
+        'statusCode': 200,
+        'headers': {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*'
+        },
+        'body': json.dumps(response_data)
+    }
