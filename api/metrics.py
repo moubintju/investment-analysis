@@ -1,7 +1,9 @@
-import json
+from flask import Flask, jsonify
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
+
+app = Flask(__name__)
 
 def generate_sample_data():
     np.random.seed(42)
@@ -99,18 +101,10 @@ sample_data = generate_sample_data()
 analyzer = InvestmentPerformanceAnalyzer(sample_data, risk_free_rate=0.015)
 analyzer.calculate_performance_metrics()
 
-def handler(event, context):
-    """Vercel serverless function handler"""
-
+@app.route('/api/metrics')
+def get_metrics():
     if not analyzer.results:
-        return {
-            'statusCode': 500,
-            'headers': {
-                'Content-Type': 'application/json',
-                'Access-Control-Allow-Origin': '*'
-            },
-            'body': json.dumps({'error': '指标未计算'})
-        }
+        return jsonify({'error': '指标未计算'}), 500
 
     metrics_data = []
     all_periods = ['近三个月', '近半年', '近一年', '近三年', '成立以来']
@@ -129,11 +123,4 @@ def handler(event, context):
                 'days': metrics['数据天数']
             })
 
-    return {
-        'statusCode': 200,
-        'headers': {
-            'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': '*'
-        },
-        'body': json.dumps(metrics_data)
-    }
+    return jsonify(metrics_data)
