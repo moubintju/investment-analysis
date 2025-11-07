@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>投资业绩分析系统</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+
+        .summary-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .card {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            transition: transform 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+        }
+
+        .card-title {
+            font-size: 0.9em;
+            color: #666;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .card-value {
+            font-size: 2em;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 5px;
+        }
+
+        .card-value.positive {
+            color: #10b981;
+        }
+
+        .card-value.negative {
+            color: #ef4444;
+        }
+
+        .card-subtitle {
+            font-size: 0.85em;
+            color: #999;
+        }
+
+        .chart-container {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+
+        .chart-wrapper {
+            position: relative;
+            height: 400px;
+            margin-bottom: 20px;
+        }
+
+        .chart-title {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .metrics-table {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th, td {
+            padding: 15px;
+            text-align: center;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        th {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-size: 0.9em;
+        }
+
+        tr:hover {
+            background-color: #f8f9fa;
+        }
+
+        .export-btn {
+            display: inline-block;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px 30px;
+            border-radius: 30px;
+            text-decoration: none;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+            margin: 20px auto;
+            display: block;
+            width: fit-content;
+        }
+
+        .export-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(0,0,0,0.3);
+        }
+
+        .loading {
+            text-align: center;
+            color: white;
+            font-size: 1.5em;
+            padding: 50px;
+        }
+
+        .error {
+            background: #ef4444;
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+            text-align: center;
+        }
+
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 1.8em;
+            }
+
+            .summary-cards {
+                grid-template-columns: 1fr;
+            }
+
+            .chart-wrapper {
+                height: 300px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>投资业绩分析系统</h1>
+            <p id="update-time">数据更新中...</p>
+        </div>
+
+        <div id="loading" class="loading">
+            正在加载数据...
+        </div>
+
+        <div id="error" class="error" style="display: none;">
+        </div>
+
+        <div id="content" style="display: none;">
+            <!-- 概览卡片 -->
+            <div class="summary-cards">
+                <div class="card">
+                    <div class="card-title">最新净值</div>
+                    <div class="card-value" id="latest-nav">-</div>
+                    <div class="card-subtitle" id="latest-date">-</div>
+                </div>
+                <div class="card">
+                    <div class="card-title">累计收益率</div>
+                    <div class="card-value" id="total-return">-</div>
+                    <div class="card-subtitle">成立以来</div>
+                </div>
+                <div class="card">
+                    <div class="card-title">年化收益率</div>
+                    <div class="card-value" id="annual-return">-</div>
+                    <div class="card-subtitle">年化指标</div>
+                </div>
+                <div class="card">
+                    <div class="card-title">夏普比率</div>
+                    <div class="card-value" id="sharpe-ratio">-</div>
+                    <div class="card-subtitle">风险调整后收益</div>
+                </div>
+                <div class="card">
+                    <div class="card-title">最大回撤</div>
+                    <div class="card-value negative" id="max-drawdown">-</div>
+                    <div class="card-subtitle">历史最大回撤</div>
+                </div>
+            </div>
+
+            <!-- 净值曲线图 -->
+            <div class="chart-container">
+                <div class="chart-title">净值曲线</div>
+                <div class="chart-wrapper">
+                    <canvas id="navChart"></canvas>
+                </div>
+            </div>
+
+            <!-- 回撤图 -->
+            <div class="chart-container">
+                <div class="chart-title">回撤曲线</div>
+                <div class="chart-wrapper">
+                    <canvas id="drawdownChart"></canvas>
+                </div>
+            </div>
+
+            <!-- 业绩指标表格 -->
+            <div class="metrics-table">
+                <div class="chart-title">业绩指标详情</div>
+                <table id="metricsTable">
+                    <thead>
+                        <tr>
+                            <th>时间段</th>
+                            <th>总收益率</th>
+                            <th>年化收益率</th>
+                            <th>年化波动率</th>
+                            <th>夏普比率</th>
+                            <th>最大回撤</th>
+                            <th>卡玛比率</th>
+                            <th>数据天数</th>
+                        </tr>
+                    </thead>
+                    <tbody id="metricsBody">
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- 导出按钮 -->
+            <a href="/api/export/excel" class="export-btn">📊 导出Excel报告</a>
+        </div>
+    </div>
+
+    <script>
+        let navChart = null;
+        let drawdownChart = null;
+
+        // 加载数据
+        async function loadData() {
+            try {
+                // 获取概览数据
+                const summaryRes = await fetch('/api/summary');
+                const summary = await summaryRes.json();
+
+                // 更新概览卡片
+                document.getElementById('latest-nav').textContent = summary.latest_nav;
+                document.getElementById('latest-date').textContent = summary.latest_date;
+                document.getElementById('total-return').textContent = summary.total_return;
+                document.getElementById('annual-return').textContent = summary.annual_return;
+                document.getElementById('sharpe-ratio').textContent = summary.sharpe_ratio;
+                document.getElementById('max-drawdown').textContent = summary.max_drawdown;
+                document.getElementById('update-time').textContent = `数据更新至: ${summary.latest_date} | 无风险利率: ${summary.risk_free_rate}`;
+
+                // 设置颜色
+                const totalReturnEl = document.getElementById('total-return');
+                const annualReturnEl = document.getElementById('annual-return');
+                if (summary.total_return.startsWith('-')) {
+                    totalReturnEl.classList.add('negative');
+                } else {
+                    totalReturnEl.classList.add('positive');
+                }
+                if (summary.annual_return.startsWith('-')) {
+                    annualReturnEl.classList.add('negative');
+                } else {
+                    annualReturnEl.classList.add('positive');
+                }
+
+                // 获取图表数据
+                const dataRes = await fetch('/api/data');
+                const chartData = await dataRes.json();
+
+                // 绘制净值曲线
+                drawNavChart(chartData);
+
+                // 绘制回撤图
+                drawDrawdownChart(chartData);
+
+                // 获取指标数据
+                const metricsRes = await fetch('/api/metrics');
+                const metrics = await metricsRes.json();
+
+                // 填充指标表格
+                fillMetricsTable(metrics);
+
+                // 显示内容，隐藏加载
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('content').style.display = 'block';
+
+            } catch (error) {
+                console.error('加载数据失败:', error);
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('error').style.display = 'block';
+                document.getElementById('error').textContent = '数据加载失败: ' + error.message;
+            }
+        }
+
+        // 绘制净值曲线
+        function drawNavChart(data) {
+            const ctx = document.getElementById('navChart').getContext('2d');
+
+            if (navChart) {
+                navChart.destroy();
+            }
+
+            navChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: data.dates,
+                    datasets: [{
+                        label: '净值',
+                        data: data.nav,
+                        borderColor: '#667eea',
+                        backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.4,
+                        pointRadius: 0,
+                        pointHoverRadius: 5
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            callbacks: {
+                                label: function(context) {
+                                    return '净值: ' + context.parsed.y.toFixed(4);
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            display: true,
+                            ticks: {
+                                maxTicksLimit: 12
+                            }
+                        },
+                        y: {
+                            display: true,
+                            beginAtZero: false
+                        }
+                    },
+                    interaction: {
+                        mode: 'nearest',
+                        axis: 'x',
+                        intersect: false
+                    }
+                }
+            });
+        }
+
+        // 绘制回撤图
+        function drawDrawdownChart(data) {
+            const ctx = document.getElementById('drawdownChart').getContext('2d');
+
+            if (drawdownChart) {
+                drawdownChart.destroy();
+            }
+
+            drawdownChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: data.dates,
+                    datasets: [{
+                        label: '回撤 (%)',
+                        data: data.drawdown,
+                        borderColor: '#ef4444',
+                        backgroundColor: 'rgba(239, 68, 68, 0.2)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.4,
+                        pointRadius: 0,
+                        pointHoverRadius: 5
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            callbacks: {
+                                label: function(context) {
+                                    return '回撤: ' + context.parsed.y.toFixed(2) + '%';
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            display: true,
+                            ticks: {
+                                maxTicksLimit: 12
+                            }
+                        },
+                        y: {
+                            display: true,
+                            max: 0
+                        }
+                    },
+                    interaction: {
+                        mode: 'nearest',
+                        axis: 'x',
+                        intersect: false
+                    }
+                }
+            });
+        }
+
+        // 填充指标表格
+        function fillMetricsTable(metrics) {
+            const tbody = document.getElementById('metricsBody');
+            tbody.innerHTML = '';
+
+            metrics.forEach(metric => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td><strong>${metric.period}</strong></td>
+                    <td>${metric.total_return}</td>
+                    <td>${metric.annual_return}</td>
+                    <td>${metric.annual_volatility}</td>
+                    <td>${metric.sharpe_ratio}</td>
+                    <td>${metric.max_drawdown}</td>
+                    <td>${metric.calmar_ratio}</td>
+                    <td>${metric.days}</td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
+        // 页面加载时执行
+        window.addEventListener('load', loadData);
+    </script>
+</body>
+</html>
