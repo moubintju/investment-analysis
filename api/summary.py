@@ -1,25 +1,8 @@
-from flask import Flask, jsonify, request
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
-import warnings
-warnings.filterwarnings('ignore')
-
-# 生成示例数据
-def generate_sample_data():
-    np.random.seed(42)
-    start_date = datetime(2024, 1, 1)
-    days = 250
-    dates = [start_date + timedelta(days=i) for i in range(days)]
-    initial_nav = 1.0
-    daily_returns = np.random.normal(0.0005, 0.01, days)
-    nav_values = [initial_nav]
-    for ret in daily_returns[1:]:
-        nav_values.append(nav_values[-1] * (1 + ret))
-    return pd.DataFrame({
-        '统计日期': dates,
-        '单元资产净值(净价)': nav_values
-    })
+from http.server import BaseHTTPRequestHandler
+import json
 
 class InvestmentPerformanceAnalyzer:
     def __init__(self, data, risk_free_rate=0.015):
@@ -98,30 +81,47 @@ class InvestmentPerformanceAnalyzer:
                 '开始日期': period_data['统计日期'].min()
             }
 
+def generate_sample_data():
+    np.random.seed(42)
+    start_date = datetime(2024, 1, 1)
+    days = 250
+    dates = [start_date + timedelta(days=i) for i in range(days)]
+    initial_nav = 1.0
+    daily_returns = np.random.normal(0.0005, 0.01, days)
+    nav_values = [initial_nav]
+    for ret in daily_returns[1:]:
+        nav_values.append(nav_values[-1] * (1 + ret))
+    return pd.DataFrame({
+        '统计日期': dates,
+        '单元资产净值(净价)': nav_values
+    })
+
 sample_data = generate_sample_data()
 analyzer = InvestmentPerformanceAnalyzer(sample_data, risk_free_rate=0.015)
 analyzer.calculate_performance_metrics()
 
-app = Flask(__name__)
+class handler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header('Content-type', 'application/json')
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.end_headers()
 
-@app.route('/api/summary', methods=['GET'])
-def handler(request=None):
-    """获取概览信息"""
-    if analyzer.data is None:
-        return jsonify({'error': '数据未加载'}), 500
+        if analyzer.data is None:
+            response = {'error': '数据未加载'}
+        else:
+            latest_metrics = analyzer.results.get('成立以来', {})
+            response = {
+                'latest_nav': f"{analyzer.data['归一化净值'].iloc[-1]:.4f}",
+                'latest_date': analyzer.data['统计日期'].iloc[-1].strftime('%Y-%m-%d'),
+                'start_date': analyzer.data['统计日期'].iloc[0].strftime('%Y-%m-%d'),
+                'total_days': len(analyzer.data),
+                'total_return': f"{latest_metrics.get('总收益率', 0):.2%}",
+                'annual_return': f"{latest_metrics.get('年化收益率', 0):.2%}",
+                'sharpe_ratio': f"{latest_metrics.get('夏普比率', 0):.2f}",
+                'max_drawdown': f"{latest_metrics.get('最大回撤', 0):.2%}",
+                'risk_free_rate': f"{analyzer.risk_free_rate:.2%}"
+            }
 
-    latest_metrics = analyzer.results.get('成立以来', {})
-
-    summary = {
-        'latest_nav': f"{analyzer.data['归一化净值'].iloc[-1]:.4f}",
-        'latest_date': analyzer.data['统计日期'].iloc[-1].strftime('%Y-%m-%d'),
-        'start_date': analyzer.data['统计日期'].iloc[0].strftime('%Y-%m-%d'),
-        'total_days': len(analyzer.data),
-        'total_return': f"{latest_metrics.get('总收益率', 0):.2%}",
-        'annual_return': f"{latest_metrics.get('年化收益率', 0):.2%}",
-        'sharpe_ratio': f"{latest_metrics.get('夏普比率', 0):.2f}",
-        'max_drawdown': f"{latest_metrics.get('最大回撤', 0):.2%}",
-        'risk_free_rate': f"{analyzer.risk_free_rate:.2%}"
-    }
-
-    return jsonify(summary)
+        self.wfile.write(json.dumps(response).encode())
+        return
